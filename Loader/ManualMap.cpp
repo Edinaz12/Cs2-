@@ -1,39 +1,71 @@
 #include "ManualMap.hpp"
+#include <Windows.h>
 #include <fstream>
 #include <vector>
-#include <windows.h>
-#include <winnt.h>
+#include <TlHelp32.h>
+#include <Psapi.h>
 
-bool ManualMap::MapRemoteModule(HANDLE hProcess, const char* dllPath) {
-    std::ifstream file(dllPath, std::ios::binary);
-    if (!file.good()) return false;
+bool WriteData(HANDLE hProcess, LPVOID lpBaseAddress, const void* data, size_t size) {
+    return WriteProcessMemory(hProcess, lpBaseAddress, data, size, nullptr);
+}
 
-    std::vector<char> dllBuffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    file.close();
+std::vector<BYTE> ReadDllFile(const char* path) {
+    std::ifstream file(path, std::ios::binary);
+    return std::vector<BYTE>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
 
-    auto dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(dllBuffer.data());
-    auto ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(dllBuffer.data() + dosHeader->e_lfanew);
+LPVOID AllocRemoteMemory(HANDLE hProcess, SIZE_T size) {
+    return VirtualAllocEx(hProcess, nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+}
 
-    SIZE_T imageSize = ntHeaders->OptionalHeader.SizeOfImage;
-    LPVOID remoteImage = VirtualAllocEx(hProcess, nullptr, imageSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    if (!remoteImage) return false;
+bool ManualMap::Inject(DWORD pid, const char* dllPath) {
+    std::vector<BYTE> dllBytes = ReadDllFile(dllPath);
+    if (dllBytes.empty()) return false;
 
-    // Write Headers
-    WriteProcessMemory(hProcess, remoteImage, dllBuffer.data(), ntHeaders->OptionalHeader.SizeOfHeaders, nullptr);
+    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if (!hProcess) return false;
 
-    // Write Sections
-    auto section = IMAGE_FIRST_SECTION(ntHeaders);
-    for (int i = 0; i < ntHeaders->FileHeader.NumberOfSections; ++i) {
-        LPVOID remoteSectionAddr = (LPBYTE)remoteImage + section[i].VirtualAddress;
-        LPVOID localSectionAddr = dllBuffer.data() + section[i].PointerToRawData;
-        WriteProcessMemory(hProcess, remoteSectionAddr, localSectionAddr, section[i].SizeOfRawData, nullptr);
+    // Allocate memory in target
+    LPVOID remoteAddr = AllocRemoteMemory(hProcess, dllBytes.size());
+    if (!remoteAddr) {
+        CloseHandle(hProcess);
+        return false;
     }
 
-    // Call DllMain remotely
-    LPTHREAD_START_ROUTINE remoteEntry = (LPTHREAD_START_ROUTINE)((LPBYTE)remoteImage + ntHeaders->OptionalHeader.AddressOfEntryPoint);
-    HANDLE hThread = CreateRemoteThread(hProcess, nullptr, 0, remoteEntry, remoteImage, 0, nullptr);
-    if (!hThread) return false;
+    // Write DLL bytes into remote process
+    if (!WriteData(hProcess, remoteAddr, dllBytes.data(), dllBytes.size())) {
+        VirtualFreeEx(hProcess, remoteAddr, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return false;
+    }
 
+    // Shellcode to manually map the DLL goes here (real manual mapping requires PE parsing, relocations, etc.)
+    // For now we simulate a basic "LoadLibrary" fallback for testing
+    HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+    FARPROC loadLibrary = GetProcAddress(hKernel32, "LoadLibraryA");
+
+    // Write DLL path for LoadLibraryA
+    LPVOID pathAddr = VirtualAllocEx(hProcess, nullptr, MAX_PATH, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    WriteProcessMemory(hProcess, pathAddr, dllPath, strlen(dllPath) + 1, nullptr);
+
+    // Create remote thread (can be replaced by queueing APC or shellcode stub)
+    HANDLE hThread = CreateRemoteThread(hProcess, nullptr, 0,
+        (LPTHREAD_START_ROUTINE)loadLibrary, pathAddr, 0, nullptr);
+
+    if (!hThread) {
+        VirtualFreeEx(hProcess, remoteAddr, 0, MEM_RELEASE);
+        VirtualFreeEx(hProcess, pathAddr, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return false;
+    }
+
+    // Wait for completion
+    WaitForSingleObject(hThread, INFINITE);
+
+    // Cleanup
+    VirtualFreeEx(hProcess, remoteAddr, 0, MEM_RELEASE);
+    VirtualFreeEx(hProcess, pathAddr, 0, MEM_RELEASE);
     CloseHandle(hThread);
+    CloseHandle(hProcess);
     return true;
 }
