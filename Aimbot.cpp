@@ -3,9 +3,9 @@
 #include <Windows.h>
 #include <cfloat>                  // Für FLT_MAX
 #include <cmath>                   // sqrtf
-#include "../config.hpp"           // CheatConfig::Get()
+#include "config.hpp"           // CheatConfig::Get()
 #include "../backend/backend.hpp"  // g_Mem
-#include "../globals.hpp"          // g_ScreenWidth, g_ScreenHeight, HEAD_OFFSET
+#include "globals.hpp"          // g_ScreenWidth, g_ScreenHeight, HEAD_OFFSET
 #include "../utils/utils.hpp"      // WorldToScreen()
 
 void Aimbot(const std::vector<Entity>& ents, const Vector3& localPos, int localTeam) {
