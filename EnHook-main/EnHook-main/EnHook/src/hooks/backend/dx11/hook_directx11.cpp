@@ -6,6 +6,7 @@
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
+#include <wrl/client.h>
 #include <memory>
 
 #pragma comment(lib, "d3d11.lib")
@@ -18,30 +19,28 @@
 #include "../../../utils/utils.hpp"
 #include "../../hooks.hpp"
 #include "../../../menu/menu.hpp"
-#include "../../../Aimbot.hpp"
-#include "../../../Triggerbot.hpp"
-#include "../../../ESP.hpp"
-#include "../../../EntityManager.hpp"
-#include "../../../memory.hpp"
-#include "../../../globals.hpp"
-#include "../../../CheatMain.hpp"  // <--- falls du CheatMain.cpp erstellst
+#include "../../../CheatMain.hpp"
 
-// DX11 Globals
-static ID3D11Device* g_pd3dDevice = NULL;
-static ID3D11DeviceContext* g_pd3dDeviceContext = NULL;
-static ID3D11RenderTargetView* g_pd3dRenderTarget = NULL;
-static IDXGISwapChain* g_pSwapChain = NULL;
+using Microsoft::WRL::ComPtr;
 
-// Vorwärtsdekl.
+// DX11 State
+static ComPtr<ID3D11Device>            g_pd3dDevice;
+static ComPtr<ID3D11DeviceContext>     g_pd3dDeviceContext;
+static ComPtr<IDXGISwapChain>          g_pSwapChain;
+static ComPtr<ID3D11RenderTargetView>  g_pRenderTarget;
+
+static bool g_ImGuiInitialized = false;
+
+// Forward decl
 static void CleanupDeviceD3D11();
 static void CleanupRenderTarget();
+static void CreateRenderTarget(IDXGISwapChain* pSwapChain);
 static void RenderImGui_DX11(IDXGISwapChain* pSwapChain);
 
-// === DX11 Render Target erstellen ===
+// === Render Target erstellen ===
 static void CreateRenderTarget(IDXGISwapChain* pSwapChain) {
-    ID3D11Texture2D* pBackBuffer = NULL;
-    pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
-    if (pBackBuffer) {
+    ComPtr<ID3D11Texture2D> pBackBuffer;
+    if (SUCCEEDED(pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer)))) {
         DXGI_SWAP_CHAIN_DESC sd;
         pSwapChain->GetDesc(&sd);
 
@@ -49,65 +48,57 @@ static void CreateRenderTarget(IDXGISwapChain* pSwapChain) {
         desc.Format = static_cast<DXGI_FORMAT>(Utils::GetCorrectDXGIFormat(sd.BufferDesc.Format));
         desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 
-        g_pd3dDevice->CreateRenderTargetView(pBackBuffer, &desc, &g_pd3dRenderTarget);
-        pBackBuffer->Release();
+        if (FAILED(g_pd3dDevice->CreateRenderTargetView(pBackBuffer.Get(), &desc, &g_pRenderTarget))) {
+            LOG("[!] Failed to create render target view.\n");
+        }
     }
 }
 
-// === Cleanup ===
 static void CleanupRenderTarget() {
-    if (g_pd3dRenderTarget) {
-        g_pd3dRenderTarget->Release();
-        g_pd3dRenderTarget = NULL;
-    }
+    g_pRenderTarget.Reset();
 }
 
 static void CleanupDeviceD3D11() {
     CleanupRenderTarget();
-
-    if (g_pSwapChain) {
-        g_pSwapChain->Release();
-        g_pSwapChain = NULL;
-    }
-    if (g_pd3dDevice) {
-        g_pd3dDevice->Release();
-        g_pd3dDevice = NULL;
-    }
-    if (g_pd3dDeviceContext) {
-        g_pd3dDeviceContext->Release();
-        g_pd3dDeviceContext = NULL;
-    }
+    g_pSwapChain.Reset();
+    g_pd3dDevice.Reset();
+    g_pd3dDeviceContext.Reset();
+    g_ImGuiInitialized = false;
 }
 
-// === Main Hook ===
+// === Main ImGui Render ===
 static void RenderImGui_DX11(IDXGISwapChain* pSwapChain) {
-    if (!ImGui::GetIO().BackendRendererUserData) {
+    if (!g_ImGuiInitialized) {
         if (SUCCEEDED(pSwapChain->GetDevice(IID_PPV_ARGS(&g_pd3dDevice)))) {
             g_pd3dDevice->GetImmediateContext(&g_pd3dDeviceContext);
-            ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+            ImGui::CreateContext();
+            ImGui_ImplDX11_Init(g_pd3dDevice.Get(), g_pd3dDeviceContext.Get());
+            g_ImGuiInitialized = true;
         }
     }
 
     if (!H::bShuttingDown) {
-        if (!g_pd3dRenderTarget)
+        if (!g_pRenderTarget) {
             CreateRenderTarget(pSwapChain);
+        }
 
-        if (ImGui::GetCurrentContext() && g_pd3dRenderTarget) {
+        if (ImGui::GetCurrentContext() && g_pRenderTarget) {
             ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
 
-            Menu::Render();     // GUI
-            CheatMain();        // Dein Cheat (Aimbot, ESP, Triggerbot...)
+            // Dein UI + Cheat-Logik
+            Menu::Render();
+            CheatMain();
 
             ImGui::Render();
-            g_pd3dDeviceContext->OMSetRenderTargets(1, &g_pd3dRenderTarget, NULL);
+            g_pd3dDeviceContext->OMSetRenderTargets(1, g_pRenderTarget.GetAddressOf(), nullptr);
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
         }
     }
 }
 
-// === Hooked Functions ===
+// === Hooked Present ===
 static std::add_pointer_t<HRESULT WINAPI(IDXGISwapChain*, UINT, UINT)> oPresent;
 static HRESULT WINAPI hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
     RenderImGui_DX11(pSwapChain);
@@ -119,32 +110,36 @@ namespace DX11 {
     void Hook(HWND hwnd) {
         LOG("[+] Initialisiere DX11 Hook...\n");
 
-        // Dummy Device zum VTable bekommen
-        DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-        swapChainDesc.Windowed = TRUE;
-        swapChainDesc.BufferCount = 2;
-        swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        swapChainDesc.OutputWindow = hwnd;
-        swapChainDesc.SampleDesc.Count = 1;
-        swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+        DXGI_SWAP_CHAIN_DESC sd = {};
+        sd.BufferCount = 2;
+        sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        sd.OutputWindow = hwnd;
+        sd.SampleDesc.Count = 1;
+        sd.Windowed = TRUE;
+        sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
-        HRESULT hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0,
-            NULL, 0, D3D11_SDK_VERSION, &swapChainDesc, &g_pSwapChain, &g_pd3dDevice, NULL, &g_pd3dDeviceContext);
+        ComPtr<ID3D11Device> pDevice;
+        ComPtr<ID3D11DeviceContext> pContext;
+        ComPtr<IDXGISwapChain> pSwap;
 
-        if (FAILED(hr) || !g_pSwapChain) {
-            LOG("[!] D3D11 Device creation failed\n");
+        HRESULT hr = D3D11CreateDeviceAndSwapChain(
+            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
+            nullptr, 0, D3D11_SDK_VERSION,
+            &sd, &pSwap, &pDevice, nullptr, &pContext
+        );
+
+        if (FAILED(hr) || !pSwap) {
+            LOG("[!] D3D11 device creation failed.\n");
             return;
         }
 
-        void** pVTable = *reinterpret_cast<void***>(g_pSwapChain);
+        void** pVTable = *reinterpret_cast<void***>(pSwap.Get());
         void* fnPresent = pVTable[8];
-
-        CleanupDeviceD3D11();
 
         if (MH_CreateHook(fnPresent, &hkPresent, reinterpret_cast<void**>(&oPresent)) != MH_OK ||
             MH_EnableHook(fnPresent) != MH_OK) {
-            LOG("[!] DX11 Hooking Present fehlgeschlagen!\n");
+            LOG("[!] Failed to hook DX11 Present.\n");
             return;
         }
 
@@ -152,15 +147,11 @@ namespace DX11 {
     }
 
     void Unhook() {
-        LOG("[~] DX11 unhook\n");
+        LOG("[~] DX11 Unhook...\n");
 
         if (ImGui::GetCurrentContext()) {
-            if (ImGui::GetIO().BackendRendererUserData)
-                ImGui_ImplDX11_Shutdown();
-
-            if (ImGui::GetIO().BackendPlatformUserData)
-                ImGui_ImplWin32_Shutdown();
-
+            ImGui_ImplDX11_Shutdown();
+            ImGui_ImplWin32_Shutdown();
             ImGui::DestroyContext();
         }
 
@@ -170,10 +161,10 @@ namespace DX11 {
 
 #else
 
-// Fallback wenn DX11 nicht aktiviert ist
+// Fallback
 #include <Windows.h>
 namespace DX11 {
-    void Hook(HWND hwnd) { LOG("[!] DX11 Backend nicht aktiviert.\n"); }
+    void Hook(HWND) { LOG("[!] DX11 Backend nicht aktiviert.\n"); }
     void Unhook() {}
 }
 
