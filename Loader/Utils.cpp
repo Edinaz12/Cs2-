@@ -1,50 +1,34 @@
 #include "Utils.hpp"
-#include <Windows.h>
 #include <TlHelp32.h>
-#include <wininet.h>
-#pragma comment(lib, "wininet.lib")
+#include <fstream>
 
-DWORD Utils::FindProcessId(const std::string& name) {
-    PROCESSENTRY32 entry;
-    entry.dwSize = sizeof(entry);
+DWORD Utils::FindProcessId(const std::wstring& name) {
+    PROCESSENTRY32W entry;
+    entry.dwSize = sizeof(PROCESSENTRY32W);
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
-    DWORD pid = 0;
-    if (snapshot == INVALID_HANDLE_VALUE) return 0;
-
-    while (Process32Next(snapshot, &entry)) {
-        if (name == entry.szExeFile) {
-            pid = entry.th32ProcessID;
-            break;
-        }
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (!_wcsicmp(entry.szExeFile, name.c_str())) {
+                CloseHandle(snapshot);
+                return entry.th32ProcessID;
+            }
+        } while (Process32NextW(snapshot, &entry));
     }
 
     CloseHandle(snapshot);
-    return pid;
+    return 0;
 }
 
-bool Utils::VerifyAuth(const std::string& url) {
-    HINTERNET hInternet = InternetOpenA("EdinazAuth", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
-    if (!hInternet) return false;
+bool Utils::ReadFileBytes(const std::string& path, std::vector<BYTE>& out) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file.good()) return false;
 
-    HINTERNET hConnect = InternetOpenUrlA(hInternet, url.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
-    if (!hConnect) {
-        InternetCloseHandle(hInternet);
-        return false;
-    }
-
-    char buffer[1024];
-    DWORD bytesRead;
-    bool success = false;
-
-    if (InternetReadFile(hConnect, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
-        buffer[bytesRead] = 0;
-        std::string response = buffer;
-        if (response.find("success") != std::string::npos)
-            success = true;
-    }
-
-    InternetCloseHandle(hConnect);
-    InternetCloseHandle(hInternet);
-    return success;
+    file.unsetf(std::ios::skipws);
+    file.seekg(0, std::ios::end);
+    size_t size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    out.reserve(size);
+    out.insert(out.begin(), std::istream_iterator<BYTE>(file), {});
+    return true;
 }
