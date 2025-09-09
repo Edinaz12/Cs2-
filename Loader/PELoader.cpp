@@ -74,6 +74,37 @@ if (ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size
         }
     }
 }
+// === Imports fixen ===
+if (ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size) {
+    auto importDesc = (IMAGE_IMPORT_DESCRIPTOR*)(rawData.data() +
+        ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+
+    while (importDesc->Name) {
+        const char* moduleName = (const char*)(rawData.data() + importDesc->Name);
+        HMODULE hModule = LoadLibraryA(moduleName); // Lade z. B. kernel32.dll
+
+        if (!hModule)
+            return false; // Fehler
+
+        auto thunkRef = (uintptr_t*)(rawData.data() + importDesc->FirstThunk);
+        auto origThunkRef = (uintptr_t*)(rawData.data() + importDesc->OriginalFirstThunk);
+
+        if (!importDesc->OriginalFirstThunk)
+            origThunkRef = thunkRef;
+
+        for (; *origThunkRef; ++origThunkRef, ++thunkRef) {
+            if (IMAGE_SNAP_BY_ORDINAL(*origThunkRef)) {
+                *thunkRef = (uintptr_t)GetProcAddress(hModule, (LPCSTR)IMAGE_ORDINAL(*origThunkRef));
+            }
+            else {
+                auto import = (IMAGE_IMPORT_BY_NAME*)(rawData.data() + (*origThunkRef));
+                *thunkRef = (uintptr_t)GetProcAddress(hModule, import->Name);
+            }
+        }
+
+        ++importDesc;
+    }
+}
 
 
     remoteBase = remoteImage;
