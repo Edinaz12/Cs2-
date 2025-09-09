@@ -1,7 +1,7 @@
 #include "ESP.hpp"
-#include "../globals.hpp"
-#include "../config.hpp"
-#include "../memory.hpp"
+#include "globals.hpp"
+#include "config.hpp"
+#include "memory.hpp"
 #include "../backend/backend.hpp"  // g_Mem
 
 #include "imgui.h"
