@@ -42,7 +42,39 @@ bool PELoader::ManualMap(HANDLE hProc, const std::vector<BYTE>& rawData, LPVOID&
     }
 
     // Optional: Relocations und Imports behandeln
-    // Das kommt als nächster Schritt
+    // === Relocations bearbeiten ===
+if (ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size) {
+    DWORD delta = (DWORD)((uintptr_t)remoteImage - ntHeader->OptionalHeader.ImageBase);
+    if (delta) {
+        auto relocDir = (IMAGE_BASE_RELOCATION*)(rawData.data() +
+            ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
+
+        while (relocDir->VirtualAddress) {
+            DWORD entries = (relocDir->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+            WORD* data = (WORD*)(relocDir + 1);
+
+            for (DWORD i = 0; i < entries; ++i) {
+                if ((data[i] >> 12) == IMAGE_REL_BASED_HIGHLOW || (data[i] >> 12) == IMAGE_REL_BASED_DIR64) {
+                    DWORD rva = relocDir->VirtualAddress + (data[i] & 0xFFF);
+                    uintptr_t patchAddr = (uintptr_t)(rawData.data() + rva);
+                    uintptr_t patchedValue = 0;
+
+                    if ((data[i] >> 12) == IMAGE_REL_BASED_HIGHLOW) {
+                        patchedValue = *(DWORD*)patchAddr + delta;
+                        *(DWORD*)patchAddr = patchedValue;
+                    }
+                    else if ((data[i] >> 12) == IMAGE_REL_BASED_DIR64) {
+                        patchedValue = *(uintptr_t*)patchAddr + delta;
+                        *(uintptr_t*)patchAddr = patchedValue;
+                    }
+                }
+            }
+
+            relocDir = (IMAGE_BASE_RELOCATION*)((BYTE*)relocDir + relocDir->SizeOfBlock);
+        }
+    }
+}
+
 
     remoteBase = remoteImage;
     return true;
