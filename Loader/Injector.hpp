@@ -2,5 +2,5 @@
 #include <string>
 
 namespace Injector {
-    bool ManualMapInject(const std::string& procName, const std::string& dllPath);
+    bool ManualMap(DWORD pid, const std::string& dllPath);
 }
