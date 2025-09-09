@@ -1,4 +1,5 @@
 #include "globals.hpp"
+#include "AntiDebug.hpp"
 #include "memory.hpp"
 #include "EntityManager.hpp"
 #include "ESP.hpp"
@@ -12,6 +13,13 @@
 // Hauptfunktion für Cheat-Logik (wird jeden Frame im Hook aufgerufen)
 void CheatMain()
 {
+    // === Anti-Debug (wird beim ersten Frame aufgerufen) ===
+    static bool antiDebugInit = false;
+    if (!antiDebugInit) {
+        AntiDebug::Init();
+        antiDebugInit = true;
+    }
+
     // Entity-Daten vorbereiten
     std::vector<Entity> ents;
     Vector3 localPos = { 0.f, 0.f, 0.f };
