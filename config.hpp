@@ -14,6 +14,12 @@ namespace CheatConfig {
 
     inline bool triggerbotEnabled = false;
     inline int triggerDelay = 25;
+    inline bool hide_from_debugger = false;
+inline bool anti_screenshot = false;
+inline bool obfuscate_strings = false;
+inline bool randomize_window_class = false;
+inline bool hide_threads = false;
+inline bool use_manual_map = false;
 
     inline const char* configPath = "config.json";
 
