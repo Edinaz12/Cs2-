@@ -2,5 +2,5 @@
 #include <Windows.h>
 
 namespace ManualMap {
-    bool MapRemoteModule(HANDLE hProcess, const char* dllPath);
+    bool Inject(DWORD pid, const char* dllPath);
 }
