@@ -2,10 +2,10 @@
 
 #include <Windows.h>
 #include <cfloat>
-#include "config.hpp"           // CheatConfig::Get()
-#include "../backend/backend.hpp"  // g_Mem
-#include "globals.hpp"          // g_ScreenWidth, g_ScreenHeight, HEAD_OFFSET
-#include "../utils/utils.hpp"      // WorldToScreen()
+#include "config.hpp"                  // CheatConfig::Get()
+#include "../backend/backend.hpp"      // g_Mem
+#include "globals.hpp"                 // g_ScreenWidth, g_ScreenHeight, HEAD_OFFSET
+#include "../utils/utils.hpp"          // WorldToScreen()
 
 void Aimbot(const std::vector<Entity>& ents, const Vector3& localPos, int localTeam) {
     if (!(GetAsyncKeyState(VK_RBUTTON) & 0x8000)) return;
