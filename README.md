@@ -1,6 +1,6 @@
 CS2 Internal
 
-This project is an educational internal cheat for CS2, made to learn the basics of internal cheats and ImGui menus.
+This project is an educational internal cheat for CS2, made to learn the basics of internals.
 It contains very basic features and is not meant as a finished product.
 
 Features
