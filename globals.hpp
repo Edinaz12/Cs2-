@@ -3,8 +3,44 @@
 #include <cmath>
 
 // ==== Vector Structs ====
-struct Vector2 { float x, y; };
-struct Vector3 { float x, y, z; };
+struct Vector2 {
+    float x, y;
+    Vector2() : x(0), y(0) {}
+    Vector2(float _x, float _y) : x(_x), y(_y) {}
+
+    // Operatoren
+    Vector2 operator+(const Vector2& rhs) const { return Vector2(x + rhs.x, y + rhs.y); }
+    Vector2 operator-(const Vector2& rhs) const { return Vector2(x - rhs.x, y - rhs.y); }
+    Vector2 operator*(float s) const { return Vector2(x * s, y * s); }
+    Vector2 operator/(float s) const { return Vector2(x / s, y / s); }
+
+    float Length() const { return std::sqrt(x * x + y * y); }
+    Vector2 Normalize() const { float l = Length(); return l > 0 ? Vector2(x / l, y / l) : Vector2(); }
+    float Dot(const Vector2& rhs) const { return x * rhs.x + y * rhs.y; }
+};
+
+struct Vector3 {
+    float x, y, z;
+    Vector3() : x(0), y(0), z(0) {}
+    Vector3(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
+
+    // Operatoren
+    Vector3 operator+(const Vector3& rhs) const { return Vector3(x + rhs.x, y + rhs.y, z + rhs.z); }
+    Vector3 operator-(const Vector3& rhs) const { return Vector3(x - rhs.x, y - rhs.y, z - rhs.z); }
+    Vector3 operator*(float s) const { return Vector3(x * s, y * s, z * s); }
+    Vector3 operator/(float s) const { return Vector3(x / s, y / s, z / s); }
+
+    float Length() const { return std::sqrt(x * x + y * y + z * z); }
+    Vector3 Normalize() const { float l = Length(); return l > 0 ? Vector3(x / l, y / l, z / l) : Vector3(); }
+    float Dot(const Vector3& rhs) const { return x * rhs.x + y * rhs.y + z * rhs.z; }
+    Vector3 Cross(const Vector3& rhs) const {
+        return Vector3(
+            y * rhs.z - z * rhs.y,
+            z * rhs.x - x * rhs.z,
+            x * rhs.y - y * rhs.x
+        );
+    }
+};
 
 // ==== Globals ====
 inline int g_ScreenWidth = 1920;
