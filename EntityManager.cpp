@@ -8,16 +8,19 @@ extern bool IsVisible(const Vector3& from, const Vector3& to);
 void EntityManager::Update() {
     m_entities.clear();
 
-    if (!g_Mem.localPawn) return;
+    // Prüfe ob LocalPlayer existiert
+    if (g_Mem.localPawn == 0)
+        return;
 
-    // LocalPlayer
+    // LocalPlayer Daten lesen
     m_localPos  = g_Mem.Read<Vector3>(g_Mem.localPawn + g_Mem.m_vecOrigin);
     m_localTeam = g_Mem.Read<int>(g_Mem.localPawn + g_Mem.m_iTeamNum);
 
-    // Entities
+    // Entities auslesen
     for (int i = 0; i < 64; ++i) {
-        DWORD_PTR entBase = g_Mem.Read<DWORD_PTR>(g_Mem.entityList + i * 8);
-        if (!entBase) continue;
+        DWORD_PTR entBase = g_Mem.Read<DWORD_PTR>(g_Mem.entityList + i * sizeof(DWORD_PTR));
+        if (!entBase)
+            continue;
 
         Entity e;
         e.id     = i;
