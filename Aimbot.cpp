@@ -1,8 +1,7 @@
 #include "Aimbot.hpp"
 
 #include <Windows.h>
-#include <cfloat>                  // Für FLT_MAX
-#include <cmath>                   // sqrtf
+#include <cfloat>
 #include "config.hpp"           // CheatConfig::Get()
 #include "../backend/backend.hpp"  // g_Mem
 #include "globals.hpp"          // g_ScreenWidth, g_ScreenHeight, HEAD_OFFSET
@@ -17,7 +16,7 @@ void Aimbot(const std::vector<Entity>& ents, const Vector3& localPos, int localT
     const Entity* bestTarget = nullptr;
     float bestScreenDist = FLT_MAX;
 
-    Vector2 screenCenter = { g_ScreenWidth / 2.0f, g_ScreenHeight / 2.0f };
+    Vector2 screenCenter(g_ScreenWidth / 2.0f, g_ScreenHeight / 2.0f);
 
     for (const auto& e : ents) {
         if (!e.visible || e.health <= 0 || e.team == localTeam)
@@ -31,9 +30,7 @@ void Aimbot(const std::vector<Entity>& ents, const Vector3& localPos, int localT
         if (!WorldToScreen(target, screen, mat))
             continue;
 
-        float dx = screen.x - screenCenter.x;
-        float dy = screen.y - screenCenter.y;
-        float dist = sqrtf(dx * dx + dy * dy);
+        float dist = (screen - screenCenter).Length();
 
         if (dist < fov && dist < bestScreenDist) {
             bestScreenDist = dist;
@@ -51,14 +48,13 @@ void Aimbot(const std::vector<Entity>& ents, const Vector3& localPos, int localT
     if (!WorldToScreen(target, screen, mat))
         return;
 
-    float dx = screen.x - screenCenter.x;
-    float dy = screen.y - screenCenter.y;
+    Vector2 delta = screen - screenCenter;
 
     // Mausbewegung mit Smoothing
     INPUT in = { 0 };
     in.type = INPUT_MOUSE;
-    in.mi.dx = LONG(dx / smoothing);
-    in.mi.dy = LONG(dy / smoothing);
+    in.mi.dx = LONG(delta.x / smoothing);
+    in.mi.dy = LONG(delta.y / smoothing);
     in.mi.dwFlags = MOUSEEVENTF_MOVE;
     SendInput(1, &in, sizeof(INPUT));
 }
