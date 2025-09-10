@@ -15,16 +15,13 @@ struct Entity {
     Vector3 pos = { 0.f, 0.f, 0.f };
 
     float DistanceTo(const Vector3& localPos) const {
-        float dx = pos.x - localPos.x;
-        float dy = pos.y - localPos.y;
-        float dz = pos.z - localPos.z;
-        return sqrtf(dx * dx + dy * dy + dz * dz);
+        return (pos - localPos).Length();
     }
 };
 
 // ==== Read<T> Template ====
 template<typename T>
-T Read(DWORD_PTR addr) noexcept {
+inline T ReadMem(DWORD_PTR addr) noexcept {
     if (!addr) return T();
     __try {
         return *reinterpret_cast<volatile T*>(addr);
@@ -49,7 +46,6 @@ inline DWORD_PTR GetModuleBase(const wchar_t* modName) {
             }
         } while (Module32Next(snap, &me));
     }
-
     CloseHandle(snap);
     return 0;
 }
@@ -62,20 +58,20 @@ public:
     DWORD_PTR localPawn = 0;
     DWORD_PTR viewMatrix = 0;
 
-    DWORD m_iHealth = 0x34C;
-    DWORD m_iTeamNum = 0x3EB;
+    DWORD m_iHealth   = 0x34C;   // Beispieloffsets, ggf. anpassen!
+    DWORD m_iTeamNum  = 0x3EB;
     DWORD m_vecOrigin = 0x15B0;
 
     void Init() {
-        clientBase = (DWORD_PTR)GetModuleHandleA("client.dll");
-        entityList = clientBase + 0x1E019A0;   // Replace with PatternScan
-        localPawn = clientBase + 0x1AF4A20;
-        viewMatrix = clientBase + 0x1D21800;
+        clientBase  = (DWORD_PTR)GetModuleHandleA("client.dll");
+        entityList  = clientBase + 0x1E019A0; // TODO: PatternScan für dynamische Offsets!
+        localPawn   = clientBase + 0x1AF4A20;
+        viewMatrix  = clientBase + 0x1D21800;
     }
 
     template<typename T>
-    T Read(DWORD_PTR addr) {
-        __try { return *(T*)addr; } __except (EXCEPTION_EXECUTE_HANDLER) { return T(); }
+    T Read(DWORD_PTR addr) noexcept {
+        return ReadMem<T>(addr);
     }
 };
 
