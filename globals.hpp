@@ -2,13 +2,12 @@
 #include <Windows.h>
 #include <cmath>
 
-// ==== Vector Structs ====
+// ==== Vector2 und Vector3 Klassen ====
 struct Vector2 {
     float x, y;
     Vector2() : x(0), y(0) {}
     Vector2(float _x, float _y) : x(_x), y(_y) {}
 
-    // Operatoren
     Vector2 operator+(const Vector2& rhs) const { return Vector2(x + rhs.x, y + rhs.y); }
     Vector2 operator-(const Vector2& rhs) const { return Vector2(x - rhs.x, y - rhs.y); }
     Vector2 operator*(float s) const { return Vector2(x * s, y * s); }
@@ -24,7 +23,6 @@ struct Vector3 {
     Vector3() : x(0), y(0), z(0) {}
     Vector3(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
 
-    // Operatoren
     Vector3 operator+(const Vector3& rhs) const { return Vector3(x + rhs.x, y + rhs.y, z + rhs.z); }
     Vector3 operator-(const Vector3& rhs) const { return Vector3(x - rhs.x, y - rhs.y, z - rhs.z); }
     Vector3 operator*(float s) const { return Vector3(x * s, y * s, z * s); }
